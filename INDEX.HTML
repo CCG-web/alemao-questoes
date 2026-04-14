@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Simulador de Questões - Banco Local</title>
+    <title>Alemão Questões - Simulador Offline</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="https://unpkg.com/docx@7.1.0/build/index.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
@@ -130,10 +130,13 @@
             <p style="font-size: 11px; color: #777; margin-top: 0;">Cole no formato: <strong>ID - Seu comentário</strong> (um por linha)</p>
             <textarea id="txtComentariosMassa" rows="4" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; margin-bottom: 8px; box-sizing: border-box; resize: vertical;" placeholder="Ex:&#10;12345 - O gabarito é letra B porque...&#10;67890 - Art. 5º da CF..."></textarea>
             <button class="btn btn-full" style="background: #f39c12;" onclick="importarComentariosMassa()">📥 Importar Comentários</button>
+            <button class="btn btn-full" style="background: #8e44ad; margin-top: 5px;" onclick="exportarComentariosTXT()">📤 Exportar Comentários (TXT)</button>
         </div>
 
         <div class="sessao-sidebar github-box">
             <h4 style="margin-top: 0; font-size: 13px; color: #444;">☁️ Banco Offline & Nuvem</h4>
+            <button class="btn btn-full" style="background: #16a085; margin-bottom: 15px;" onclick="fazerBackupCompleto()">💾 Baixar Backup Total (JSON)</button>
+            
             <input type="file" id="upload" webkitdirectory directory multiple title="Selecione a pasta com seus JSONs" style="width: 100%; margin-bottom: 10px; font-size: 12px; background: #e1f5fe; padding: 5px; border-radius: 4px; cursor: pointer;">
             <hr style="border: 0; border-top: 1px solid #ddd; margin: 10px 0;">
             <input type="password" id="ghToken" placeholder="GitHub Token">
@@ -256,6 +259,34 @@
             }
         } catch (e) { document.getElementById('status').innerText = "❌ Erro ao ler banco local."; }
     };
+
+    // ==========================================
+    // BACKUPS
+    // ==========================================
+    function fazerBackupCompleto() {
+        if (bancoDados.length === 0) return alert("O banco de dados está vazio.");
+        let dataAtual = new Date().toISOString().split('T')[0];
+        const blob = new Blob([JSON.stringify(bancoDados, null, 2)], { type: 'application/json' });
+        saveAs(blob, `Backup_Simulador_Completo_${dataAtual}.json`);
+    }
+
+    function exportarComentariosTXT() {
+        let txt = "";
+        let cont = 0;
+        bancoDados.forEach(q => {
+            if (q.meu_comentario && q.meu_comentario.trim() !== "") {
+                // Remove quebras de linha para manter no formato de linha única
+                let comentarioLimpo = q.meu_comentario.replace(/\n|\r/g, ' ');
+                txt += `${q.id} - ${comentarioLimpo}\n`;
+                cont++;
+            }
+        });
+
+        if (cont === 0) return alert("Nenhum comentário encontrado para exportar.");
+
+        let dataAtual = new Date().toISOString().split('T')[0];
+        saveAs(new Blob([txt], { type: "text/plain;charset=utf-8" }), `Backup_Comentarios_${dataAtual}.txt`);
+    }
 
     // ==========================================
     // INTEGRAÇÃO DE PASTA (UPLOAD) E GITHUB
@@ -727,6 +758,9 @@
     // ==========================================
     // EXPORTAR POWERPOINT
     // ==========================================
+    // ==========================================
+    // EXPORTAR POWERPOINT (Com Quebra Automática)
+    // ==========================================
     function gerarPPTX() {
         if (filtradasGlobal.length === 0) return alert("Nenhuma questão para exportar!");
         if (typeof PptxGenJS === 'undefined') return alert("A biblioteca PPTX está carregando. Tente novamente em alguns segundos.");
@@ -740,22 +774,35 @@
             let nomeBanca = extrairBanca(q);
             let ano = q.ano && q.ano !== "Ano Indefinido" ? ` - ${q.ano}` : "";
             
-            slide.addText(`Questão ${index + 1} | ID: ${q.id} | [${nomeBanca}${ano}]`, { x: 0.5, y: 0.3, w: '90%', h: 0.5, fontSize: 14, bold: true, color: '004a8e' });
+            // Cabeçalho da questão
+            slide.addText(`Questão ${index + 1} | ID: ${q.id} | [${nomeBanca}${ano}]`, { 
+                x: 0.5, y: 0.3, w: '90%', h: 0.5, fontSize: 14, bold: true, color: '004a8e' 
+            });
 
+            // Extrai texto limpo
             let tempDiv = document.createElement("div");
             tempDiv.innerHTML = q.enunciado;
             let enunciadoLimpo = tempDiv.textContent || tempDiv.innerText || "";
 
+            // Formata as alternativas
             let altsTexto = q.itens.map((it, idx) => {
                 return `${letrasAlternativas[idx] || '-'}) ${it.corpo_clean}`;
             }).join('\n\n');
 
             let corpoTotal = `${enunciadoLimpo}\n\n${altsTexto}`;
-            slide.addText(corpoTotal, { x: 0.5, y: 1.0, w: '90%', h: 5.5, fontSize: 12, valign: 'top', align: 'left' });
+
+            // Adiciona o texto com autoPaged = true (Quebra automática ativada)
+            slide.addText(corpoTotal, { 
+                x: 0.5, y: 1.0, w: '90%', h: 5.5, 
+                fontSize: 12, valign: 'top', align: 'left',
+                autoPaged: true 
+            });
 
             // SLIDE 2: GABARITO E COMENTÁRIO
             let slideGab = pptx.addSlide();
-            slideGab.addText(`Gabarito da Questão ${index + 1}`, { x: 0.5, y: 0.5, w: '90%', h: 1, fontSize: 24, bold: true, align: 'center', color: '27ae60' });
+            slideGab.addText(`Gabarito da Questão ${index + 1}`, { 
+                x: 0.5, y: 0.5, w: '90%', h: 1, fontSize: 24, bold: true, align: 'center', color: '27ae60' 
+            });
 
             let gabaritoCorreto = q.itens.find(it => it.id === q.resposta);
             let letraCorreta = gabaritoCorreto ? letrasAlternativas[q.itens.indexOf(gabaritoCorreto)] : "?";
@@ -765,7 +812,12 @@
                 textoGabarito += `\nComentário:\n${q.meu_comentario}`;
             }
 
-            slideGab.addText(textoGabarito, { x: 1, y: 2, w: '80%', h: 3, fontSize: 18, align: 'center' });
+            // O comentário também recebe autoPaged caso você escreva um texto muito longo
+            slideGab.addText(textoGabarito, { 
+                x: 0.5, y: 1.8, w: '90%', h: 4.5, 
+                fontSize: 18, align: 'center', valign: 'top',
+                autoPaged: true 
+            });
         });
 
         pptx.writeFile({ fileName: `Questoes_Apresentacao_${new Date().getTime()}.pptx` });
